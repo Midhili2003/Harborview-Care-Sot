@@ -90,12 +90,15 @@ def invalid_value(ctx, p):
             out.append(issue(p, "warning", title, f"{ctx.where(r)}: {msg}.", r.get("entity_key"), f, [r],
                              f"{r['record_key']}|{msg}"))
         for f in r["norm"].get("_reformatted", []):
-            reformatted[(r["file"], f)].append(r)
-    for (file, f), rs in reformatted.items():
+            reformatted[r["file"]].append((f, r))
+    for file, items in reformatted.items():
+        fields = sorted({f.replace("_", " ") for f, _ in items})
+        rs = list({id(r): r for _, r in items}.values())
         out.append({**issue(p, "info", "Dates in a non-standard format",
-                            f"{len(rs)} {f.replace('_', ' ')} value(s) in {file} were not written as YYYY-MM-DD "
-                            f"and were converted ({ctx.cfg.date_order.upper()} order assumed). Check they were read correctly.",
-                            rs[0].get("entity_key") if len(rs) == 1 else None, f, rs, f"{file}|{f}"),
+                            f"{file}: {len(items)} date(s) in {', '.join(fields)} were not written as YYYY-MM-DD "
+                            f"and were converted ({ctx.cfg.date_order.upper()} order assumed, e.g. 03/04 = "
+                            f"{'March 4' if ctx.cfg.date_order == 'mdy' else '3 April'}). Check they were read correctly.",
+                            rs[0].get("entity_key") if len(rs) == 1 else None, None, rs, file),
                     "severity": "info"})
     return out
 
@@ -291,7 +294,9 @@ def activity_after_expiry(ctx, p):
                 when = sorted({ev["start_date"] if ev["start_date"] == ev["end_date"]
                                else f"{ev['start_date']} to {ev['end_date']}" for ev in evs_k})
                 parts.append(f"{kind} {sum(ev['hours'] for ev in evs_k):g} hours ({', '.join(when)})")
-            recs = [r for r in ctx.entities[ek].records if r["record_key"] in {ev["record_key"] for ev in bad}]
+            src = (ctx.golden.get(ek, {}).get(p["field"]) or {}).get("source")
+            recs = [r for r in ctx.entities[ek].records if r["source"] == src and r["norm"].get(p["field"])][:1]
+            recs += [r for r in ctx.entities[ek].records if r["record_key"] in {ev["record_key"] for ev in bad}]
             out.append(issue(p, "critical", "Working on an expired license",
                              f"{ctx.name(ek)}'s license expired on {d}, but they are " + " and ".join(parts)
                              + " after that date. This is a compliance risk, and these hours should not be "

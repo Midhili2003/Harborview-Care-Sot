@@ -62,8 +62,9 @@ def parse_date(value, order: str = "mdy"):
 
 
 def is_non_iso_date(value) -> bool:
+    """True for dates typed in another format; Excel cells arrive as 'YYYY-MM-DD 00:00:00' and are fine."""
     s = clean(value)
-    return bool(s) and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", s)
+    return bool(s) and not re.fullmatch(r"\d{4}-\d{2}-\d{2}( 00:00:00)?", s)
 
 
 # ---------- numbers / phones ----------
