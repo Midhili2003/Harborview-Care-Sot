@@ -291,7 +291,9 @@ def activity_after_expiry(ctx, p):
                 when = sorted({ev["start_date"] if ev["start_date"] == ev["end_date"]
                                else f"{ev['start_date']} to {ev['end_date']}" for ev in evs_k})
                 parts.append(f"{kind} {sum(ev['hours'] for ev in evs_k):g} hours ({', '.join(when)})")
-            recs = [r for r in ctx.entities[ek].records if r["record_key"] in {ev["record_key"] for ev in bad}]
+            src = (ctx.golden.get(ek, {}).get(p["field"]) or {}).get("source")
+            recs = [r for r in ctx.entities[ek].records if r["source"] == src and r["norm"].get(p["field"])][:1]
+            recs += [r for r in ctx.entities[ek].records if r["record_key"] in {ev["record_key"] for ev in bad}]
             out.append(issue(p, "critical", "Working on an expired license",
                              f"{ctx.name(ek)}'s license expired on {d}, but they are " + " and ".join(parts)
                              + " after that date. This is a compliance risk, and these hours should not be "

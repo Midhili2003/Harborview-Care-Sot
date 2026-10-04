@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from sot.apps.reports import credentials_report, staffing_report
+from sot.apps.reports import agreement_grid, credentials_report, overview, staffing_report
 from sot.core.config import Config
 from sot.core.pipeline import accept_match, close_issue, ingest, reject_match, reopen
 from sot.core.store import Store
@@ -23,13 +23,33 @@ SEV_BG = {"critical": "#FEF3F2", "warning": "#FFFAEB", "info": "#F2F4F7"}
 st.set_page_config(page_title="Harborview source of truth", page_icon="🩺", layout="wide")
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&display=swap');
-html, body, [class*="css"], .stMarkdown, .stButton button, .stTabs button { font-family: 'Public Sans', sans-serif; }
-h1 { font-weight: 700; letter-spacing: -0.01em; color: #0E3B4A; }
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap');
+:root { --ink:#0E3B4A; --text:#1D2939; --muted:#667085; --line:#D0D5DD; --surface:#F2F4F7;
+        --crit:#B42318; --warn:#B54708; --ok:#067647; }
+html, body, [class*="css"], .stMarkdown, .stButton button, .stTabs button, input, textarea { font-family: 'Public Sans', sans-serif; }
+.hero { text-align:center; margin: 0.5rem auto 1.75rem; max-width: 1200px; }
+.hero h1 { font-family:'Public Sans',sans-serif; font-size: clamp(2rem, 4vw, 3rem); font-weight: 800; color: var(--ink);
+           letter-spacing: -0.02em; line-height: 1.1; margin: 0; padding: 0; }
+.hero p { color: var(--muted); font-size: 1.05rem; margin: 0.6rem 0 0; }
+.strip { display:flex; justify-content:center; flex-wrap:wrap; margin: 1.25rem auto 0.5rem; }
+.strip div { padding: 0.25rem 1.75rem; border-left: 1px solid var(--line); text-align:center; }
+.strip div:first-child { border-left: none; }
+.strip b { display:block; font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
+.strip span { color: var(--muted); font-size: 0.85rem; }
+.stamp { text-align:center; color: var(--muted); font-size: 0.8rem; }
 .sev { display:inline-block; padding: 1px 8px; border-radius: 3px; font-size: 0.8rem; font-weight: 600; }
-.count { font-size: 2rem; font-weight: 700; line-height: 1; }
-.countlabel { color: #475467; font-size: 0.9rem; }
 .expl { font-size: 1rem; line-height: 1.5; max-width: 75ch; }
+.quote { color: var(--muted); font-style: italic; font-size: 0.92rem; line-height: 1.45; margin-bottom: 0.6rem; }
+.answer { font-size: 1.3rem; font-weight: 700; line-height: 1.25; margin: 0.2rem 0 0.5rem; }
+.detail { font-size: 0.95rem; line-height: 1.6; color: var(--text); }
+table.grid { border-collapse: collapse; width: 100%; font-size: 0.92rem; border: none; }
+table.grid th, table.grid td { border-left: none !important; border-right: none !important; border-top: none !important; }
+table.grid th { text-align:left; font-weight:600; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); }
+table.grid td { padding: 7px 10px; border-bottom: 1px solid var(--surface); vertical-align: top; }
+table.grid td.name { font-weight: 600; color: var(--text); white-space: nowrap; }
+.chip { display:inline-block; font-size: 0.82rem; font-weight: 600; }
+.chip.agrees { color: var(--ok); } .chip.differs { color: var(--warn); } .chip.missing { color: #98A2B3; font-weight: 500; }
+.why { display:block; color: var(--muted); font-size: 0.78rem; font-weight: 400; }
 </style>""", unsafe_allow_html=True)
 
 
@@ -73,24 +93,98 @@ def records_by_key(keys):
 # --------------------------------------------------------------------------- header
 run = store.last_run()
 summary = json.loads(run["summary"]) if run and run.get("summary") else {}
-st.title(f"{cfg.business.get('name', 'Business')}: one trusted record")
+o = summary.get("issues_open", {}) if summary else {}
+strip = ""
 if summary:
-    o = summary.get("issues_open", {})
-    cols = st.columns(5)
-    for c, (label, value, color) in zip(cols, [
-        ("people", summary.get("entities", 0), "#0E3B4A"),
-        ("records", sum(summary.get("records_by_source", {}).values()), "#0E3B4A"),
-        ("critical", o.get("critical", 0), SEV_COLOR["critical"]),
-        ("warnings", o.get("warning", 0), SEV_COLOR["warning"]),
-        ("info", o.get("info", 0), SEV_COLOR["info"]),
-    ]):
-        c.markdown(f"<div class='count' style='color:{color}'>{value}</div><div class='countlabel'>{label}</div>",
-                   unsafe_allow_html=True)
-    st.caption(f"Last ingest {run['started_at']}, checks run as of {summary.get('as_of')}")
+    figures = [("people", summary.get("entities", 0), "var(--ink)"),
+               ("records", sum(summary.get("records_by_source", {}).values()), "var(--ink)"),
+               ("critical", o.get("critical", 0), "var(--crit)"),
+               ("warnings", o.get("warning", 0), "var(--warn)"),
+               ("info", o.get("info", 0), "var(--muted)")]
+    strip = "<div class='strip'>" + "".join(f"<div><b style='color:{c}'>{v}</b><span>{l}</span></div>"
+                                            for l, v, c in figures) + "</div>"
+st.markdown(f"""<div class='hero'><h1>{cfg.business.get('name', 'Business')}: one trusted record</h1>
+<p>HR, payroll, license verification and the staff schedule, checked against each other.</p>{strip}</div>""",
+            unsafe_allow_html=True)
+if summary:
+    st.markdown(f"<div class='stamp'>Last ingest {run['started_at'].replace('T', ' ')} · checks run as of "
+                f"{summary.get('as_of')}</div>", unsafe_allow_html=True)
 else:
-    st.info("No data yet. Load files in the first tab.")
+    st.info("No data yet. Upload files in the Load data tab.")
 
-tabs = st.tabs(["Load data", "Issues", "People", "Licenses", "Staffing report", "Decisions"])
+tabs = st.tabs(["Overview", "Load data", "Issues", "People", "Licenses", "Staffing report", "Decisions"])
+
+# --------------------------------------------------------------------------- overview
+with tabs[0]:
+    if not summary:
+        st.write("Upload files in the **Load data** tab to see where the company stands.")
+    else:
+        ov = overview(cfg, store)
+        c1, c2, c3 = st.columns(3)
+        with c1.container(border=True):
+            st.markdown("**State staffing report**")
+            st.markdown("<div class='quote'>\u201cReporting our staffing numbers to the state takes someone weeks, "
+                        "and we're never fully confident in them.\u201d</div>", unsafe_allow_html=True)
+            stf = ov["staffing"]
+            if stf["ready"]:
+                st.markdown("<div class='answer' style='color:var(--ok)'>Ready to submit</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div class='answer' style='color:var(--crit)'>Not ready: {stf['blocking']} open "
+                            f"issue{'s' if stf['blocking'] != 1 else ''} affect the numbers</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='detail'>{stf['paid']:g} hours paid, {stf['scheduled']:g} scheduled."
+                        + (f"<br>{stf['excluded']:g} hours left out because a license had expired." if stf["excluded"] else "")
+                        + "</div>", unsafe_allow_html=True)
+        with c2.container(border=True):
+            st.markdown("**Licenses and certifications**")
+            st.markdown("<div class='quote'>\u201cLicenses, certifications, and vendor paperwork expire, "
+                        "and we usually find out too late.\u201d</div>", unsafe_allow_html=True)
+            lic = ov["licenses"]
+            if lic["expired"] or lic["soon"]:
+                st.markdown(f"<div class='answer' style='color:var(--crit)'>{len(lic['expired'])} expired, "
+                            f"{len(lic['soon'])} within 30 days</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='answer' style='color:var(--ok)'>Nothing expiring in 30 days</div>",
+                            unsafe_allow_html=True)
+            lines = [f"{r['name']}: expired {r['expires']}" for r in lic["expired"]]
+            lines += [f"{r['name']}: expires {r['expires']} ({r['days_left']} days)" for r in lic["soon"]]
+            lines += [f"<b style='color:var(--crit)'>{r['name']} is scheduled after the expiry date</b>"
+                      for r in lic["worked_after"]]
+            lines.append(f"{lic['total']} licenses tracked, checked as of {ov['as_of']}.")
+            st.markdown("<div class='detail'>" + "<br>".join(lines) + "</div>", unsafe_allow_html=True)
+        with c3.container(border=True):
+            st.markdown("**Referral readiness**")
+            st.markdown("<div class='quote'>\u201cBy the time we get through referrals, the patient has often "
+                        "gone somewhere else.\u201d</div>", unsafe_allow_html=True)
+            total = sum(n for roles in ov["capacity"].values() for n in roles.values())
+            st.markdown(f"<div class='answer' style='color:var(--ink)'>{total} licensed staff on the schedule</div>",
+                        unsafe_allow_html=True)
+            lines = [f"<b>{fac}</b>: " + ", ".join(f"{n} {role}" for role, n in roles.items())
+                     for fac, roles in ov["capacity"].items()]
+            if ov["capacity_period"]:
+                lines.append(f"Week of {ov['capacity_period']}, counting only valid licenses.")
+            if ov["not_counted"]:
+                lines.append("Not counted: " + ", ".join(ov["not_counted"]) + ".")
+            st.markdown("<div class='detail'>" + "<br>".join(lines) + "</div>", unsafe_allow_html=True)
+
+        st.markdown("#### How the four systems agree")
+        st.caption("Each person, checked against every system. A system that disagrees with the others is "
+                   "marked, with the reason. Open the Issues tab for details.")
+        grid = agreement_grid(cfg, store)
+        label = {"agrees": "\u2713 agrees", "differs": "differs", "missing": "\u2014 not found"}
+        rows_html = []
+        for r in grid["rows"]:
+            cells = []
+            for src, _ in grid["sources"]:
+                st_ = r["status"][src]
+                why = f"<span class='why'>{r['why'][src]}</span>" if r["why"].get(src) else ""
+                cells.append(f"<td><span class='chip {st_}'>{label[st_]}</span>{why}</td>")
+            flag = "" if r["in_anchor"] else " <span class='why' style='display:inline'>(not in HR)</span>"
+            rows_html.append(f"<tr><td class='name'>{r['name']}{flag}</td>{''.join(cells)}</tr>")
+        head = "".join(f"<th>{lbl}</th>" for _, lbl in grid["sources"])
+        st.markdown(f"<div style='overflow-x:auto'><table class='grid'><tr><th>Person</th>{head}</tr>"
+                    f"{''.join(rows_html)}</table></div>", unsafe_allow_html=True)
+        agree = sum(1 for r in grid["rows"] if all(v == "agrees" for v in r["status"].values()))
+        st.caption(f"{agree} of {len(grid['rows'])} people agree across every system.")
 
 # --------------------------------------------------------------------------- load
 METHOD_LABELS = {"anchor_key": "from the HR roster", "strong_key": "by license number",
@@ -98,7 +192,7 @@ METHOD_LABELS = {"anchor_key": "from the HR roster", "strong_key": "by license n
                  "human_kept_separate": "kept separate by a person", "unmatched": "waiting for review",
                  "anchor_name": "from the HR roster (no ID)"}
 
-with tabs[0]:
+with tabs[1]:
     st.subheader("Ingest files")
     st.write("Upload the HR roster, payroll and license exports (CSV or Excel) and the staff schedule (PDF).")
     uploads = st.file_uploader("Files", accept_multiple_files=True,
@@ -133,7 +227,7 @@ with tabs[0]:
         st.caption("Sample data is checked as of 21 September 2026, the week it covers.")
 
 # --------------------------------------------------------------------------- issues
-with tabs[1]:
+with tabs[2]:
     issues = store.query("SELECT * FROM issues")
     if not issues:
         st.write("Nothing flagged.")
@@ -181,12 +275,12 @@ with tabs[1]:
                         reject_match(cfg, store, i["id"], note)
                         st.rerun()
                 else:
-                    b1, b2, _ = st.columns([1, 1, 3])
+                    b1, b2, _ = st.columns([1, 1, 2.5])
                     choice = None
                     if b1.button("Mark as resolved", key=f"res{i['id']}", type="primary",
                                  help="Someone dealt with it, e.g. took the person off the schedule."):
                         choice = "resolved"
-                    if b2.button("Accept as-is", key=f"acc{i['id']}",
+                    if b2.button("Accept as it is", key=f"acc{i['id']}",
                                  help="It is correct as it is, e.g. a float aide who works at both sites."):
                         choice = "accepted"
                     if choice:
@@ -197,7 +291,7 @@ with tabs[1]:
                             st.error(str(e))
 
 # --------------------------------------------------------------------------- people
-with tabs[2]:
+with tabs[3]:
     ents = store.query("SELECT * FROM entities ORDER BY display_name")
     if ents:
         opts = {e["entity_key"]: f"{e['display_name']}  ({e['entity_key']})" for e in ents}
@@ -232,41 +326,55 @@ with tabs[2]:
             st.dataframe(pd.DataFrame(shifts), hide_index=True, width="stretch")
 
 # --------------------------------------------------------------------------- licenses
-with tabs[3]:
+with tabs[4]:
     rows = credentials_report(cfg, store) if summary else []
     if rows:
-        df = pd.DataFrame(rows)
-        st.write("Sorted by days left. Expired or soon-expiring licenses are listed with any shifts already "
-                 "scheduled after the expiry date.")
+        st.write("Every license, soonest expiry first. The expiry date comes from the license verification "
+                 "service, and shifts already scheduled after that date are counted.")
+        status_label = {"EXPIRED": "Expired", "<30 days": "Within 30 days", "<90 days": "Within 90 days",
+                        "ok": "Valid", "MISSING DATE": "No date on file"}
+        df = pd.DataFrame([{"Name": r["name"], "Facility": r["facility"], "Role": r["role"],
+                            "License": r["license_number"], "Expires": r["expires"], "Days left": r["days_left"],
+                            "Status": status_label.get(r["status"], r["status"]),
+                            "Last verified": r["last_verified"], "Shifts after expiry": r["shifts_after_expiry"]}
+                           for r in rows])
 
         def color(v):
-            return {"EXPIRED": f"color:{SEV_COLOR['critical']};font-weight:600",
-                    "<30 days": f"color:{SEV_COLOR['warning']};font-weight:600"}.get(v, "")
-        st.dataframe(df.style.map(color, subset=["status"]), hide_index=True, width="stretch")
+            return {"Expired": f"color:{SEV_COLOR['critical']};font-weight:600",
+                    "Within 30 days": f"color:{SEV_COLOR['warning']};font-weight:600",
+                    "No date on file": f"color:{SEV_COLOR['warning']};font-weight:600"}.get(v, "")
+        st.dataframe(df.style.map(color, subset=["Status"]), hide_index=True, width="stretch")
 
 # --------------------------------------------------------------------------- staffing
-with tabs[4]:
+with tabs[5]:
     if summary:
-        q = st.text_input("Quarter (e.g. 2026Q3). Leave blank for everything loaded.", "")
+        q = st.text_input("Quarter", "", placeholder="e.g. 2026Q3. Leave blank for everything loaded.")
         rep = staffing_report(cfg, store, q or None)
         if rep["warning"]:
             st.error(rep["warning"])
         else:
-            st.success("No open critical or warning issues affect these numbers.")
+            st.success("No open critical or warning issues affect these numbers. Ready to submit.")
         st.caption(f"Period: {rep['period']}")
-        st.dataframe(pd.DataFrame(rep["summary"]), hide_index=True, width="stretch")
+        st.dataframe(pd.DataFrame([{"Facility": r["facility"], "Role": r["role"], "Staff": r["headcount"],
+                                    "Hours paid": r["paid_hours"], "Hours scheduled": r["scheduled_hours"],
+                                    "Difference": r["variance"]} for r in rep["summary"]]),
+                     hide_index=True, width="stretch")
+        st.caption("Difference is hours paid minus hours scheduled. Anything other than zero is explained by an "
+                   "open issue for someone in that group.")
         if rep["excluded"]:
-            st.caption("Hours left out because the license had expired")
-            st.dataframe(pd.DataFrame(rep["excluded"]), hide_index=True, width="stretch")
+            st.markdown("**Hours left out because the license had expired**")
+            st.dataframe(pd.DataFrame([{"Name": r["name"], "Hours": r["hours"], "Reason": r["reason"]}
+                                       for r in rep["excluded"]]), hide_index=True, width="stretch")
         if rep["daily"]:
             daily = pd.DataFrame(rep["daily"])
-            st.caption("Daily scheduled hours by facility and role (the shape a state staffing submission needs)")
+            st.markdown("**Daily scheduled hours by facility and role**")
+            st.caption("The day-by-day breakdown a state staffing submission asks for.")
             st.dataframe(daily.pivot_table(index=["facility", "role"], columns="date", values="scheduled_hours",
                                            aggfunc="sum", fill_value=0), width="stretch")
             st.download_button("Download daily detail (CSV)", daily.to_csv(index=False), "staffing_daily.csv")
 
 # --------------------------------------------------------------------------- decisions
-with tabs[5]:
+with tabs[6]:
     st.write("Human decisions are stored separately from the data and re-applied on every ingest, "
              "so nobody has to fix the same thing twice.")
     d = store.query("SELECT kind, key, value, note, created_at FROM decisions ORDER BY id DESC")
@@ -280,7 +388,7 @@ with tabs[5]:
                 iss = titles.get(r["key"], {})
                 what = f"{iss.get('title', 'Issue')}" + (f" ({names.get(iss.get('entity_key'), '')})"
                                                          if iss.get("entity_key") else "")
-                decision = "Marked as resolved" if value == "resolved" else "Accepted as-is"
+                decision = "Marked as resolved" if value == "resolved" else "Accepted as it is"
             else:
                 src, name = (r["key"].split("|") + ["", ""])[:2]
                 what = f"{cfg.source_label(src)} record '{name.title()}'"
