@@ -1,0 +1,204 @@
+# Business configuration for Harborview Care Group.
+# Everything domain-specific lives here. The engine in sot/core knows nothing
+# about nursing homes; a client in another industry gets a new file like this.
+
+business:
+  name: Harborview Care Group
+  entity_label: Employee          # what one "subject" is called in the UI
+  credential_label: License
+
+dates:
+  order: mdy                       # how to read ambiguous dates like 03/04/2026
+
+# Canonical codes and every spelling we have seen for them.
+value_maps:
+  facility:
+    BYS:
+      label: Harborview Bayside
+      aliases: [Bayside, Harborview Bayside, Harborview - Bayside, HB Bayside, BAY, HBS, Bayside SNF]
+    RVD:
+      label: Harborview Riverdale
+      aliases: [Riverdale, Harborview Riverdale, Harborview - Riverdale, HB Riverdale, RIV, HRD, Riverdale SNF]
+  role:
+    RN:
+      label: Registered Nurse
+      aliases: [Registered Nurse, R.N., Staff Nurse, Charge Nurse RN]
+    LPN:
+      label: Licensed Practical Nurse
+      aliases: [Licensed Practical Nurse, LVN, Licensed Vocational Nurse, L.P.N.]
+    CNA:
+      label: Certified Nursing Assistant
+      aliases: [Certified Nursing Assistant, Nurse Aide, Nursing Assistant, C.N.A., Certified Nurse Aide, STNA]
+    DON:
+      label: Director of Nursing
+      aliases: [Director of Nursing, Director of Nursing Services, DNS]
+    ADM:
+      label: Administrator
+      aliases: [Administrator, Nursing Home Administrator, NHA, Facility Administrator]
+    NP:
+      label: Nurse Practitioner
+      aliases: [Nurse Practitioner, APRN]
+    MA:
+      label: Medication Aide
+      aliases: [Medication Aide, Med Aide, CMA, Certified Medication Aide]
+
+# Different roles that legitimately hold the same license type.
+role_equivalents:
+  - [DON, RN]
+  - [NP, RN]
+  - [MA, CNA]
+
+# First-name nicknames. Key is the canonical form.
+nicknames:
+  marcus: [marc, mark]
+  michael: [mike, mick]
+  william: [will, bill, billy, liam]
+  robert: [rob, bob, bobby, robbie]
+  elizabeth: [liz, beth, betty, eliza, lizzy]
+  katherine: [kate, kathy, katie, kat, catherine, kathryn]
+  jennifer: [jen, jenny]
+  christopher: [chris]
+  daniel: [dan, danny]
+  james: [jim, jimmy, jamie]
+  joseph: [joe, joey]
+  patricia: [pat, patty, trish]
+  anthony: [tony]
+  victoria: [vicky, tori]
+  alexander: [alex]
+  alexandra: [alex, lexi, sandra]
+  samuel: [sam]
+  samantha: [sam]
+  thomas: [tom, tommy]
+  margaret: [maggie, peggy, meg]
+  rebecca: [becky, becca]
+  nicholas: [nick]
+  benjamin: [ben]
+  jonathan: [jon]
+  deborah: [deb, debbie]
+  gregory: [greg]
+  timothy: [tim]
+  steven: [steve, stephen]
+  andrew: [andy, drew]
+  angela: [angie]
+  priya: [pri]
+
+identifiers:
+  employee_id:
+    pattern: '^E\d{3,}$'
+  license:
+    pattern: '^(RN|LPN|LVN|CNA|NP|APRN|MA|CMA|NHA|ADM)-\d{4,}$'
+    dash: true                     # RN551203 / RN 551203 -> RN-551203
+
+sources:
+  hr:
+    label: HR roster
+    loader: table
+    anchor: true                  # the system that defines who exists
+    fields:
+      employee_id:        {aliases: [employee_id, emp_id, employee id, employee number, emp no, 'emp #', staff id], type: identifier:employee_id, required: true}
+      first_name:         {aliases: [first_name, first, first name, given name, fname], type: first_name, required: true}
+      last_name:          {aliases: [last_name, last, last name, surname, family name, lname], type: last_name, required: true}
+      role:               {aliases: [job_title, title, position, job title, role, job], type: code:role, required: true}
+      facility:           {aliases: [facility, site, location, building, facility name], type: code:facility, required: true}
+      phone:              {aliases: [phone, phone_number, phone number, mobile, cell, telephone], type: phone}
+      license_number:     {aliases: [license_number, license number, license no, 'license #', license, certification number, cert number], type: identifier:license}
+      license_expiration: {aliases: [license_expiration, license exp, license_exp, license expiry, license expiration date, exp date, exp_date], type: date}
+      hire_date:          {aliases: [hire_date, hire date, date hired, start date, start_date, doh], type: date}
+
+  payroll:
+    label: Payroll
+    loader: table
+    fields:
+      payroll_id:   {aliases: [payroll_id, payroll id, pay id, check id, record id], type: string, required: true}
+      name:         {aliases: [employee_name, employee name, name, employee, worker], type: person_name, required: true}
+      role:         {aliases: [job_code, job code, role, position code, title], type: code:role, required: true}
+      facility:     {aliases: [facility_code, facility code, facility, site, location, cost center], type: code:facility, required: true}
+      period_start: {aliases: [period_start, period start, pay period start, start, from], type: date, required: true}
+      period_end:   {aliases: [period_end, period end, pay period end, end, to], type: date, required: true}
+      hours:        {aliases: [hours_paid, hours paid, hours, total hours, paid hours], type: number, required: true}
+
+  licenses:
+    label: License verification
+    loader: table
+    fields:
+      license_number:     {aliases: [license_number, license number, license no, 'license #', credential number], type: identifier:license, required: true}
+      name:               {aliases: [name_on_license, name on license, licensee, holder name, name], type: person_name, required: true}
+      license_type:       {aliases: [license_type, license type, type, credential type], type: code:role, required: true}
+      license_expiration: {aliases: [expiration_date, expiration date, expires, expiry, exp date], type: date, required: true}
+      last_verified:      {aliases: [last_verified, last verified, verified on, verification date, verified], type: date}
+
+  schedule:
+    label: Staff schedule
+    loader: pdf_grid
+    fields:
+      name: {aliases: [staff, name, employee, staff member, nurse], type: person_name, required: true}
+      role: {aliases: [role, position, title, discipline], type: code:role}
+      facility: {aliases: [], type: code:facility}   # read from the page title
+    off_values: ['off', '', '-', '--', 'x', 'n/a']
+    leave_values: [pto, vac, vacation, sick, loa, hol, holiday]
+
+# How people are matched across systems.
+entity:
+  anchor_source: hr
+  anchor_key: employee_id
+  strong_keys:
+    - field: license_number
+      sources: [hr, licenses]
+  support_fields: [facility, role]
+  thresholds:
+    auto: 0.90       # at or above: match automatically
+    review: 0.75     # between review and auto: ask a human
+
+# Which system wins for each field of the golden record (first non-empty wins).
+golden:
+  display_name:       [hr, licenses, payroll, schedule]
+  employee_id:        [hr]
+  role:               [hr, payroll, schedule]
+  facility:           [hr, payroll, schedule]
+  phone:              [hr]
+  hire_date:          [hr]
+  license_number:     [licenses, hr]
+  license_type:       [licenses]
+  license_expiration: [licenses, hr]
+  last_verified:      [licenses]
+
+# Time-based activity derived from sources.
+events:
+  - {source: schedule, kind: scheduled}
+  - {source: payroll, kind: paid, start: period_start, end: period_end, hours: hours}
+
+# Rule instances. Rule *types* are generic and live in sot/core/rules.py.
+rules:
+  - {type: required, severity: warning}
+  - {type: invalid_value, severity: warning}
+  - {type: duplicate_key, source: hr, field: employee_id, severity: warning}
+  - {type: duplicate_key, source: licenses, field: license_number, severity: warning}
+  - {type: duplicate_key, source: payroll, field: payroll_id, severity: warning}
+  - {type: future_date, source: hr, field: hire_date, severity: warning}
+  - {type: numeric_range, source: payroll, field: hours, min: 0, max: 80, severity: warning}
+  - {type: date_order, source: payroll, start: period_start, end: period_end, severity: warning}
+  - {type: not_in_anchor, source: payroll, severity: critical,
+     why: "Someone is being paid who does not exist in HR. This could be a data entry error or a payroll risk."}
+  - {type: not_in_anchor, source: schedule, severity: warning,
+     why: "Someone is on the posted schedule but is not in HR."}
+  - {type: not_in_anchor, source: licenses, severity: info,
+     why: "The license service returned a license that no HR record points to."}
+  - {type: missing_from, source: payroll, severity: warning,
+     why: "This employee is in HR but has no payroll record in the periods provided."}
+  - {type: missing_from, source: schedule, severity: info,
+     why: "This employee is in HR but does not appear on the posted schedule."}
+  - {type: missing_from, source: licenses, when_field: license_number, severity: warning,
+     why: "HR lists a license number, but the license service has no record of it."}
+  - {type: missing_value, field: license_number, roles: [RN, LPN, CNA, DON, NP, MA], severity: warning,
+     why: "This role requires a license, but no license number is on file."}
+  - {type: field_conflict, label: License expiration, fields: {hr: license_expiration, licenses: license_expiration}, severity: warning}
+  - {type: field_conflict, label: License number, fields: {hr: license_number, licenses: license_number}, severity: warning}
+  - {type: field_conflict, label: Role, fields: {hr: role, licenses: license_type, payroll: role, schedule: role}, equivalents: role_equivalents, severity: warning}
+  - {type: field_conflict, label: Facility, fields: {hr: facility, payroll: facility, schedule: facility}, severity: warning}
+  - {type: field_conflict, label: Name, fields: {hr: _name_key, licenses: _name_key, payroll: _name_key, schedule: _name_key}, severity: info}
+  - {type: expiry, field: license_expiration, id_field: license_number, severity: critical, windows: [[30, warning], [90, info]]}
+  - {type: activity_after_expiry, field: license_expiration, kinds: [scheduled, paid], severity: critical}
+  - {type: stale, source: licenses, field: last_verified, max_age_days: 60, severity: warning}
+  - {type: hours_reconcile, scheduled: scheduled, paid: paid, tolerance: 0.5, severity: warning}
+  - {type: overtime, kind: paid, max_hours: 40, severity: info}
+  - {type: overlap, kind: scheduled, severity: warning}

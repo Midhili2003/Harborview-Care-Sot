@@ -1,0 +1,13 @@
+employee_id,first_name,last_name,job_title,facility,phone,license_number,license_expiration,hire_date,emergency_contact
+E201,Sofia,Reyes,Registered Nurse,Harborview Bayside,718-555-0201,RN-551203,2027-05-31,2020-03-02,
+E201,Sofia,Reyes,Registered Nurse,Harborview Bayside,718-555-0201,RN-551203,2027-05-31,2020-03-02,
+E202,Marcus,Bell,Certified Nursing Assistant,Harborview Riverdale,347-555-0202,CNA-771045,2026-12-31,2022-09-12,
+E203,Priya,Natarajan,Licensed Practical Nurse,Harborview Bayside,(718) 555-0203,LPN-430918,2027-06-30,2021-01-18,
+E204,James,Okafor,Registered Nurse,Harborview Riverdale,347-555-0204,RN-662781,2026-09-16,2019-06-03,
+E205,Linda,Chen,Certified Nursing Assistant,Harborview Bayside,718-555-0205,CNA-880231,2026-10-10,2023-02-27,
+,,,,,,,,,
+E206,Daniel,Brooks,Registered Nurse,Harborview Bayside,718-555-0206,RN-553871,2028-02-29,2018-11-05,
+E207,Angela,Torres,Registered Nurse,Harborview Riverdale,347-555-0207,LPN-551877,2027-04-30,2022-04-11,
+E208,Kevin,Walsh,Certified Nursing Assistant,Harborview Riverdale,347-555-0208,CNA-772210,2027-01-31,2024-08-19,
+E209,Grace,Kim,Registered Nurse,,347-555-0209,RN-664120,2027-11-30,2026-11-02,
+E210,Thomas,Wright,Certified Nursing Assistant,Harborview Bayside,718-555-0210,CNA-881907,2027-07-31,09/14/2026,
