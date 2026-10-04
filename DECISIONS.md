@@ -47,7 +47,7 @@ Headers are matched by synonyms and loose matching, so reordered, renamed or ext
 
 ## 8. Human decisions are data too
 
-Confirming a match, keeping records separate, or dismissing an issue with a note is stored in its own table and re-applied on every ingest. Each ingest rebuilds everything else from the raw files, so the same files always produce the same result.
+A reviewer can confirm a possible match, keep records separate, mark an issue as **resolved** (someone dealt with it, such as taking a person off the schedule) or **accept it as-is** (the data is correct, such as a float aide who works at both sites). These are different statements, so they are recorded differently. Critical issues cannot be closed without a note saying what was done. Decisions are stored in their own table and re-applied on every ingest. Each ingest rebuilds everything else from the raw files, so the same files always produce the same result.
 
 **Why:** a source of truth that forgets yesterday's fixes is a cleanup script, not a system.
 

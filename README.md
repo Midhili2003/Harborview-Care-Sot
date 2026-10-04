@@ -24,16 +24,20 @@ python -m sot.cli report credentials
 python -m sot.cli report staffing --quarter 2026Q3 --csv staffing_daily.csv
 ```
 
-Or use the dashboard: **Load data → upload all four files → Ingest**. Then walk through Issues, People, Licenses and Staffing report.
+Or use the dashboard: **Load data → upload all four files → Ingest files**. Then walk through Issues, People, Licenses and Staffing report.
 
 Useful extras:
 
 | Command | What it does |
 |---|---|
 | `python -m sot.cli issues` | Every open issue, with its id |
-| `python -m sot.cli decide <id> accept` | Confirm a possible match (remembered on future ingests) |
-| `python -m sot.cli decide <id> reject` | Keep records separate and stop asking |
-| `python -m sot.cli decide <id> dismiss --note "float nurse"` | Accept an issue as-is, with a reason |
+| `python -m sot.cli decide <id> confirm` | Confirm a possible match (remembered on future ingests) |
+| `python -m sot.cli decide <id> separate` | Keep records separate and stop asking |
+| `python -m sot.cli decide <id> resolve --note "removed from shifts"` | Someone dealt with the issue |
+| `python -m sot.cli decide <id> accept --note "float aide, works both sites"` | The data is correct as it is |
+| `python -m sot.cli decide <id> reopen` | Put a closed issue back on the open list |
+
+Critical issues can only be closed with a note, so there is always a reason on record.
 | `python -m sot.cli rebuild --as-of 2026-10-01` | Re-run checks against a different date |
 
 ## What it flags
@@ -63,7 +67,7 @@ sot/cli.py               command line
 app.py                   Streamlit dashboard
 tools/generate_fixtures.py  practice data in the judging formats
 fixtures/                messy + clean practice data, EXPECTED_ISSUES.md
-tests/                   21 tests incl. robustness (BOM, semicolons, shuffled/renamed/missing columns, Excel, unruled PDF)
+tests/                   23 tests incl. robustness (BOM, semicolons, shuffled/renamed/missing columns, Excel, unruled PDF)
 ```
 
 ## Run the tests
@@ -77,4 +81,4 @@ pytest -q
 1. Push this repo to GitHub.
 2. Go to [share.streamlit.io](https://share.streamlit.io), sign in with GitHub, choose **Create app**, pick this repo, branch `main`, main file `app.py`, and deploy.
 
-The hosted app starts empty; use **Load practice data** or upload files. Its database resets when the app restarts.
+The hosted app starts empty; upload files, or open **Use sample data** at the bottom of the Load data tab. Its database resets when the app restarts.

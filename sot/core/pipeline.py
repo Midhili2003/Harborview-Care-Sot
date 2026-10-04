@@ -48,7 +48,7 @@ def build(cfg: Config, store: Store, as_of: date | None = None) -> dict:
     records = store.load_records()
     file_issues = store.load_file_issues()
     match_dec = {k: v["value"] for k, v in store.decisions("match").items()}
-    dismissed = store.decisions("dismiss")
+    closed = store.decisions("close")
 
     entities, links, match_issues = resolve(cfg, records, match_dec)
     golden = {k: build_golden(cfg, e) for k, e in entities.items()}
@@ -64,8 +64,8 @@ def build(cfg: Config, store: Store, as_of: date | None = None) -> dict:
         if i["fingerprint"] in seen:
             continue
         seen.add(i["fingerprint"])
-        d = dismissed.get(i["fingerprint"])
-        i["status"] = "dismissed" if d else "open"
+        d = closed.get(i["fingerprint"])
+        i["status"] = d["value"] if d else "open"
         i["note"] = d["note"] if d else None
         unique.append(i)
     unique.sort(key=lambda i: (SEVERITY_ORDER.get(i["severity"], 9), i["rule_id"], ctx.name(i.get("entity_key"))))
@@ -80,7 +80,7 @@ def build(cfg: Config, store: Store, as_of: date | None = None) -> dict:
         "anchored_entities": sum(1 for e in entities.values() if e.origin == cfg.anchor),
         "match_methods": dict(methods),
         "issues_open": dict(Counter(i["severity"] for i in open_issues)),
-        "issues_dismissed": sum(1 for i in unique if i["status"] == "dismissed"),
+        "issues_closed": dict(Counter(i["status"] for i in unique if i["status"] != "open")),
     }
     store.save_derived(links, entities, golden, events, unique, summary)
     return summary
@@ -118,14 +118,27 @@ def reject_match(cfg: Config, store: Store, issue_id: int, note: str = "") -> di
     return build(cfg, store)
 
 
-def dismiss(cfg: Config, store: Store, issue_id: int, note: str = "") -> dict:
-    """Accept an issue as-is (e.g. 'float nurse, works at both sites'). Remembered across ingests."""
+CLOSE_STATUSES = {
+    "resolved": "Someone dealt with it (e.g. took the person off the schedule).",
+    "accepted": "It is correct as it is (e.g. a float aide who works at both sites).",
+}
+
+
+def close_issue(cfg: Config, store: Store, issue_id: int, status: str, note: str = "") -> dict:
+    """Close an issue as 'resolved' or 'accepted'. Remembered across ingests.
+
+    Critical issues need a note, so there is always a reason on record.
+    """
+    if status not in CLOSE_STATUSES:
+        raise ValueError(f"status must be one of {sorted(CLOSE_STATUSES)}")
     i = _issue(store, issue_id)
-    store.add_decision("dismiss", i["fingerprint"], True, note)
+    if i["severity"] == "critical" and not note.strip():
+        raise ValueError("Critical issues need a note explaining what was done.")
+    store.add_decision("close", i["fingerprint"], status, note.strip())
     return build(cfg, store)
 
 
 def reopen(cfg: Config, store: Store, issue_id: int) -> dict:
     i = _issue(store, issue_id)
-    store.remove_decision("dismiss", i["fingerprint"])
+    store.remove_decision("close", i["fingerprint"])
     return build(cfg, store)

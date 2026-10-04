@@ -13,7 +13,7 @@ import sys
 from datetime import date
 
 from .core.config import Config
-from .core.pipeline import accept_match, build, dismiss, ingest, reject_match, reopen
+from .core.pipeline import accept_match, build, close_issue, ingest, reject_match, reopen
 from .apps.reports import credentials_report, staffing_report
 from .core.store import Store
 
@@ -28,7 +28,7 @@ def print_summary(store: Store, s: dict, top: int = 10):
     print("Match methods: " + ", ".join(f"{k}={v}" for k, v in s["match_methods"].items()))
     o = s["issues_open"]
     print(f"\nOpen issues: {o.get('critical', 0)} critical, {o.get('warning', 0)} warning, {o.get('info', 0)} info"
-          + (f" ({s['issues_dismissed']} dismissed)" if s["issues_dismissed"] else ""))
+          + "".join(f", {n} {k}" for k, n in s["issues_closed"].items()))
     rows = store.query("SELECT severity, title, explanation FROM issues WHERE status='open' "
                        "AND severity IN ('critical','warning') LIMIT ?", (top,))
     for r in rows:
@@ -66,7 +66,8 @@ def main(argv=None):
     p.add_argument("--csv")
     p = sub.add_parser("decide", help="record a human decision on an issue")
     p.add_argument("issue_id", type=int)
-    p.add_argument("action", choices=["accept", "reject", "dismiss", "reopen"])
+    p.add_argument("action", choices=["confirm", "separate", "resolve", "accept", "reopen"],
+                   help="confirm/separate: possible matches. resolve: dealt with it. accept: correct as-is.")
     p.add_argument("--to", help="entity key to match to (default: best candidate)")
     p.add_argument("--note", default="")
     sub.add_parser("reset", help="delete all data and decisions")
@@ -105,11 +106,16 @@ def main(argv=None):
             table(rows, ["name", "facility", "role", "license_number", "expires", "days_left", "status",
                          "last_verified", "shifts_after_expiry"])
     elif a.cmd == "decide":
-        fn = {"accept": lambda: accept_match(cfg, store, a.issue_id, a.to, a.note),
-              "reject": lambda: reject_match(cfg, store, a.issue_id, a.note),
-              "dismiss": lambda: dismiss(cfg, store, a.issue_id, a.note),
+        fn = {"confirm": lambda: accept_match(cfg, store, a.issue_id, a.to, a.note),
+              "separate": lambda: reject_match(cfg, store, a.issue_id, a.note),
+              "resolve": lambda: close_issue(cfg, store, a.issue_id, "resolved", a.note),
+              "accept": lambda: close_issue(cfg, store, a.issue_id, "accepted", a.note),
               "reopen": lambda: reopen(cfg, store, a.issue_id)}[a.action]
-        print_summary(store, fn())
+        try:
+            print_summary(store, fn())
+        except ValueError as e:
+            print(f"Not saved: {e}")
+            return 1
     elif a.cmd == "reset":
         store.reset()
         print("All data and decisions deleted.")

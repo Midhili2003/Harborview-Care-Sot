@@ -1,7 +1,9 @@
 import json
 
 from conftest import AS_OF, ROOT, issues
-from sot.core.pipeline import accept_match, dismiss, ingest, reject_match
+import pytest
+
+from sot.core.pipeline import accept_match, close_issue, ingest, reject_match, reopen
 
 
 def _possible(store):
@@ -24,10 +26,28 @@ def test_reject_match_keeps_separate_and_stops_asking(run, cfg):
     assert not [i for i in issues(store) if i["rule_id"] == "possible_match"]
 
 
-def test_dismiss_persists(run, cfg):
+def test_accept_as_is_persists(run, cfg):
     store, _ = run(ROOT / "fixtures/messy")
     target = [i for i in issues(store) if i["rule_id"] == "overtime"][0]
-    dismiss(cfg, store, target["id"], note="approved overtime")
+    close_issue(cfg, store, target["id"], "accepted", note="approved overtime")
     ingest(cfg, store, [ROOT / "fixtures/messy"], AS_OF)
-    d = issues(store, "dismissed")
-    assert [i for i in d if i["rule_id"] == "overtime" and i["note"] == "approved overtime"]
+    assert [i for i in issues(store, "accepted") if i["rule_id"] == "overtime" and i["note"] == "approved overtime"]
+
+
+def test_critical_needs_a_note(run, cfg):
+    store, _ = run(ROOT / "fixtures/messy")
+    crit = [i for i in issues(store) if i["rule_id"] == "activity_after_expiry"][0]
+    with pytest.raises(ValueError):
+        close_issue(cfg, store, crit["id"], "resolved", note="  ")
+    s = close_issue(cfg, store, crit["id"], "resolved", note="Removed from 09/17 and 09/18 shifts")
+    assert s["issues_open"]["critical"] == 3
+    assert s["issues_closed"] == {"resolved": 1}
+
+
+def test_reopen(run, cfg):
+    store, _ = run(ROOT / "fixtures/messy")
+    target = [i for i in issues(store) if i["rule_id"] == "overlap"][0]
+    close_issue(cfg, store, target["id"], "accepted", note="float aide")
+    closed = [i for i in issues(store, "accepted")][0]
+    reopen(cfg, store, closed["id"])
+    assert [i for i in issues(store) if i["rule_id"] == "overlap"]

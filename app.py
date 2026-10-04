@@ -11,7 +11,7 @@ import streamlit as st
 
 from sot.apps.reports import credentials_report, staffing_report
 from sot.core.config import Config
-from sot.core.pipeline import accept_match, dismiss, ingest, reject_match, reopen
+from sot.core.pipeline import accept_match, close_issue, ingest, reject_match, reopen
 from sot.core.store import Store
 
 ROOT = Path(__file__).parent
@@ -93,34 +93,44 @@ else:
 tabs = st.tabs(["Load data", "Issues", "People", "Licenses", "Staffing report", "Decisions"])
 
 # --------------------------------------------------------------------------- load
+METHOD_LABELS = {"anchor_key": "from the HR roster", "strong_key": "by license number",
+                 "fuzzy_name": "by name", "human_decision": "confirmed by a person",
+                 "human_kept_separate": "kept separate by a person", "unmatched": "waiting for review",
+                 "anchor_name": "from the HR roster (no ID)"}
+
 with tabs[0]:
-    left, right = st.columns([3, 2])
-    with left:
-        st.subheader("Ingest files")
-        st.write("Drop in the HR roster, payroll and license exports (CSV or Excel) and the schedule PDF. "
-                 "File types are detected from their columns, so names don't matter.")
-        uploads = st.file_uploader("Files", accept_multiple_files=True, type=["csv", "tsv", "txt", "xlsx", "xls", "pdf"])
-        as_of = st.date_input("Run time-based checks as of", value=date.today(),
-                              help="Expiry and staleness are measured from this date.")
-        if st.button("Ingest uploaded files", type="primary", disabled=not uploads):
-            with tempfile.TemporaryDirectory() as tmp:
-                for u in uploads:
-                    (Path(tmp) / u.name).write_bytes(u.getbuffer())
-                ingest(cfg, store, [tmp], as_of)
-            st.rerun()
-    with right:
-        st.subheader("Practice data")
-        st.write("Generated in the same formats as the real files. The messy set has 25 planted problems; "
-                 "the clean set should raise no warnings.")
-        variant = st.radio("Dataset", ["messy", "clean"], horizontal=True)
-        if st.button("Load practice data"):
-            ingest(cfg, store, [ROOT / "fixtures" / variant], date(2026, 9, 21))
-            st.rerun()
+    st.subheader("Ingest files")
+    st.write("Upload the HR roster, payroll and license exports (CSV or Excel) and the staff schedule (PDF).")
+    uploads = st.file_uploader("Files", accept_multiple_files=True,
+                               type=["csv", "tsv", "txt", "xlsx", "xls", "pdf"], label_visibility="collapsed")
+    c1, c2 = st.columns([1, 3])
+    as_of = c1.date_input("Check expiry dates as of", value=date.today(),
+                          help="License expiry and verification age are measured from this date.")
+    if st.button("Ingest files", type="primary", disabled=not uploads):
+        with tempfile.TemporaryDirectory() as tmp:
+            for u in uploads:
+                (Path(tmp) / u.name).write_bytes(u.getbuffer())
+            ingest(cfg, store, [tmp], as_of)
+        st.rerun()
+
     if summary.get("files"):
         st.subheader("Last ingest")
-        st.dataframe(pd.DataFrame(summary["files"]).rename(columns={"source": "detected as"}),
+        st.dataframe(pd.DataFrame([{"File": f["file"],
+                                    "Recognised as": cfg.source_label(f["source"]) if f["source"] else "Not recognised",
+                                    "Records": f["records"]} for f in summary["files"]]),
                      hide_index=True, width="stretch")
-        st.write("Matching: " + ", ".join(f"{v} by {k.replace('_', ' ')}" for k, v in summary["match_methods"].items()))
+        st.caption("Records linked to a person: " + ", ".join(
+            f"{v} {METHOD_LABELS.get(k, k.replace('_', ' '))}" for k, v in summary["match_methods"].items()))
+
+    with st.expander("Use sample data"):
+        st.write("A fictional week of Harborview data in the same four formats, for trying the system out.")
+        s1, s2 = st.columns([2, 1])
+        variant = s1.radio("Sample", ["With data problems", "Clean"], horizontal=True, label_visibility="collapsed")
+        if s2.button("Load sample data"):
+            folder = "messy" if variant == "With data problems" else "clean"
+            ingest(cfg, store, [ROOT / "fixtures" / folder], date(2026, 9, 21))
+            st.rerun()
+        st.caption("Sample data is checked as of 21 September 2026, the week it covers.")
 
 # --------------------------------------------------------------------------- issues
 with tabs[1]:
@@ -131,7 +141,7 @@ with tabs[1]:
         names = entity_names()
         f1, f2, f3, f4 = st.columns(4)
         sev = f1.multiselect("Severity", ["critical", "warning", "info"], default=["critical", "warning"])
-        status = f2.selectbox("Status", ["open", "dismissed", "all"])
+        status = f2.selectbox("Status", ["open", "resolved", "accepted", "all"])
         rule_opts = sorted({i["title"] for i in issues})
         rule_sel = f3.multiselect("Type", rule_opts)
         person = f4.selectbox("Person", ["Everyone"] + sorted({names.get(i["entity_key"], "") for i in issues
@@ -151,11 +161,17 @@ with tabs[1]:
                     st.caption("Source rows behind this issue")
                     show_records(recs)
                 vals = json.loads(i["vals"] or "{}")
-                note = st.text_input("Note", key=f"note{i['id']}", value=i["note"] or "",
-                                     placeholder="Why, for the audit trail")
-                b1, b2, b3 = st.columns([2, 1, 1])
-                if i["rule_id"] == "possible_match" and i["status"] == "open":
+                if i["status"] != "open":
+                    st.markdown(f"**{i['status'].capitalize()}**" + (f": {i['note']}" if i["note"] else ""))
+                    if st.button("Reopen", key=f"o{i['id']}"):
+                        reopen(cfg, store, i["id"])
+                        st.rerun()
+                    continue
+                note = st.text_input("Note" + (" (required for critical issues)" if i["severity"] == "critical" else ""),
+                                     key=f"note{i['id']}", placeholder="What was checked or done, for the audit trail")
+                if i["rule_id"] == "possible_match":
                     cands = vals.get("candidates", [])
+                    b1, b2, b3 = st.columns([2, 1, 1])
                     target = b1.selectbox("Same person as", cands, key=f"t{i['id']}",
                                           format_func=lambda k: f"{names.get(k, k)} ({k})")
                     if b2.button("Confirm match", key=f"a{i['id']}", type="primary"):
@@ -164,14 +180,21 @@ with tabs[1]:
                     if b3.button("Keep separate", key=f"r{i['id']}"):
                         reject_match(cfg, store, i["id"], note)
                         st.rerun()
-                elif i["status"] == "open":
-                    if b3.button("Dismiss", key=f"d{i['id']}", help="Accept as-is. Remembered on future ingests."):
-                        dismiss(cfg, store, i["id"], note)
-                        st.rerun()
                 else:
-                    if b3.button("Reopen", key=f"o{i['id']}"):
-                        reopen(cfg, store, i["id"])
-                        st.rerun()
+                    b1, b2, _ = st.columns([1, 1, 3])
+                    choice = None
+                    if b1.button("Mark as resolved", key=f"res{i['id']}", type="primary",
+                                 help="Someone dealt with it, e.g. took the person off the schedule."):
+                        choice = "resolved"
+                    if b2.button("Accept as-is", key=f"acc{i['id']}",
+                                 help="It is correct as it is, e.g. a float aide who works at both sites."):
+                        choice = "accepted"
+                    if choice:
+                        try:
+                            close_issue(cfg, store, i["id"], choice, note)
+                            st.rerun()
+                        except ValueError as e:
+                            st.error(str(e))
 
 # --------------------------------------------------------------------------- people
 with tabs[2]:
@@ -248,9 +271,24 @@ with tabs[5]:
              "so nobody has to fix the same thing twice.")
     d = store.query("SELECT kind, key, value, note, created_at FROM decisions ORDER BY id DESC")
     if d:
-        st.dataframe(pd.DataFrame(d), hide_index=True, width="stretch")
+        names = entity_names()
+        titles = {r["fingerprint"]: r for r in store.query("SELECT fingerprint, title, entity_key FROM issues")}
+        rows = []
+        for r in d:
+            value = json.loads(r["value"])
+            if r["kind"] == "close":
+                iss = titles.get(r["key"], {})
+                what = f"{iss.get('title', 'Issue')}" + (f" ({names.get(iss.get('entity_key'), '')})"
+                                                         if iss.get("entity_key") else "")
+                decision = "Marked as resolved" if value == "resolved" else "Accepted as-is"
+            else:
+                src, name = (r["key"].split("|") + ["", ""])[:2]
+                what = f"{cfg.source_label(src)} record '{name.title()}'"
+                decision = f"Matched to {names.get(value, value)}" if value else "Kept separate"
+            rows.append({"Decision": decision, "About": what, "Note": r["note"], "When": r["created_at"]})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
     else:
-        st.caption("No decisions yet.")
+        st.caption("No decisions yet. Decisions are made from the Issues tab.")
     if st.button("Delete all data and decisions"):
         store.reset()
         st.rerun()
