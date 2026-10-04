@@ -24,7 +24,7 @@ python -m sot.cli report credentials
 python -m sot.cli report staffing --quarter 2026Q3 --csv staffing_daily.csv
 ```
 
-Or use the dashboard: **Load data → upload all four files → Ingest files**. Then start at **Overview**, which answers the three problems from the brief and shows how the four systems agree for each person, and drill into Issues, People, Licenses and Staffing report.
+Or use the dashboard: **Load data → upload all four files → Ingest files**. Then walk through Issues, People, Licenses and Staffing report.
 
 Useful extras:
 
@@ -67,7 +67,7 @@ sot/cli.py               command line
 app.py                   Streamlit dashboard
 tools/generate_fixtures.py  practice data in the judging formats
 fixtures/                messy + clean practice data, EXPECTED_ISSUES.md
-tests/                   25 tests incl. robustness (BOM, semicolons, shuffled/renamed/missing columns, Excel, unruled PDF)
+tests/                   23 tests incl. robustness (BOM, semicolons, shuffled/renamed/missing columns, Excel, unruled PDF)
 ```
 
 ## Run the tests

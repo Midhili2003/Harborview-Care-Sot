@@ -72,24 +72,3 @@ def test_reingest_is_idempotent(run, cfg):
     s2 = ingest(cfg, store, [ROOT / "fixtures/messy"], AS_OF)
     assert s1["issues_open"] == s2["issues_open"]
     assert s1["entities"] == s2["entities"]
-
-
-def test_overview_answers_the_three_problems(run, cfg):
-    from sot.apps.reports import overview
-    store, _ = run(ROOT / "fixtures/messy")
-    ov = overview(cfg, store)
-    assert not ov["staffing"]["ready"] and ov["staffing"]["excluded"] == 16
-    assert [r["name"] for r in ov["licenses"]["expired"]] == ["James Okafor"]
-    assert [r["name"] for r in ov["licenses"]["soon"]] == ["Linda Chen"]
-    assert "James Okafor" in ov["not_counted"]          # expired license is not counted as capacity
-
-
-def test_agreement_grid_blames_the_odd_system_out(run, cfg):
-    from sot.apps.reports import agreement_grid
-    store, _ = run(ROOT / "fixtures/messy")
-    rows = {r["entity_key"]: r for r in agreement_grid(cfg, store)["rows"]}
-    assert rows["hr:E207"]["status"]["hr"] == "differs"            # Angela: HR alone says RN
-    assert rows["hr:E207"]["status"]["licenses"] == "agrees"
-    assert rows["hr:E208"]["status"]["payroll"] == "differs"       # Kevin: payroll facility
-    assert rows["hr:E206"]["status"]["payroll"] == "differs"       # Daniel: hours
-    assert rows["hr:E201"]["status"] == {s: "agrees" for s in cfg.sources}
